@@ -1184,6 +1184,39 @@ func RenderBody(body Component) {
 	}
 }
 
+// Render renders the given component as the element
+func Render(selector string, component Component) {
+	// block batch until we're done
+	batch.scheduled = true
+	defer func() {
+		requestAnimationFrame(batch.render)
+	}()
+	nextRender, skip, pendingMounts := renderComponent(component, nil)
+	if skip {
+		panic("vecty: Render Component.SkipRender illegally returned true")
+	}
+	doc := global.Get("document")
+
+	do := func() {
+		element := doc.Call("querySelector", selector)
+		if element == undefined {
+			panic("vecty: Not found \"" + selector + "\"")
+		}
+		root := element.Call("attachShadow", map[string]interface{}{"mode": "open"})
+		root.Call("appendChild", nextRender.node)
+		mount(pendingMounts...)
+		if m, ok := component.(Mounter); ok {
+			mount(m)
+		}
+	}
+
+	if doc.Get("readyState").String() == "loading" {
+		doc.Call("addEventListener", "DOMContentLoaded", do)
+		return
+	}
+	do()
+}
+
 // SetTitle sets the title of the document.
 func SetTitle(title string) {
 	global.Get("document").Set("title", title)
